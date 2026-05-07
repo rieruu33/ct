@@ -62,7 +62,8 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                           {match.tournament?.name || "Friendly Match"}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(match.match_date), "EEEE, MMMM d, yyyy 'at' HH:mm")}
+                          {/* PERBAIKAN: Menggunakan HH:mm untuk format 24 jam */}
+                          {format(new Date(match.match_date), "MMM d, yyyy HH:mm")}
                         </p>
                       </div>
                     </div>

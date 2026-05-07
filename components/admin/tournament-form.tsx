@@ -13,24 +13,28 @@ import { createClient } from "@/lib/supabase/client"
 
 interface TournamentFormProps {
   players: Player[]
+  initialData?: any // Prop baru untuk menampung data lama
 }
 
-export function TournamentForm({ players }: TournamentFormProps) {
+export function TournamentForm({ players, initialData }: TournamentFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Cek apakah ini mode Edit
+  const isEdit = !!initialData
+
   const [formData, setFormData] = useState({
-    name: "",
-    organizer: "",
-    bracket_url: "",
-    start_date: "",
-    end_date: "",
-    registration_fee: "",
-    prize_won: "",
-    placement: "",
-    status: "upcoming",
-    selected_players: [] as number[],
+    name: initialData?.name || "",
+    organizer: initialData?.organizer || "",
+    bracket_url: initialData?.bracket_url || "",
+    start_date: initialData?.start_date || "",
+    end_date: initialData?.end_date || "",
+    registration_fee: initialData?.registration_fee?.toString() || "",
+    prize_won: initialData?.prize_won?.toString() || "",
+    placement: initialData?.placement || "",
+    status: initialData?.status || "upcoming",
+    selected_players: initialData?.selected_players || ([] as number[]),
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,30 +44,70 @@ export function TournamentForm({ players }: TournamentFormProps) {
 
     try {
       const supabase = createClient()
+      
+      const payload = {
+        name: formData.name,
+        organizer: formData.organizer,
+        bracket_url: formData.bracket_url || null,
+        start_date: formData.start_date,
+        end_date: formData.end_date || null,
+        registration_fee: parseFloat(formData.registration_fee) || 0,
+        prize_won: parseFloat(formData.prize_won) || 0,
+        placement: formData.placement || null,
+        status: formData.status,
+      }
 
-      // Insert tournament
-      const { data: tournament, error: tournamentError } = await supabase
-        .from("tournaments")
-        .insert({
-          name: formData.name,
-          organizer: formData.organizer,
-          bracket_url: formData.bracket_url || null,
-          start_date: formData.start_date,
-          end_date: formData.end_date || null,
-          registration_fee: parseFloat(formData.registration_fee) || 0,
-          prize_won: parseFloat(formData.prize_won) || 0,
-          placement: formData.placement || null,
-          status: formData.status,
-        })
-        .select()
-        .single()
+      let tournamentId = null
 
-      if (tournamentError) throw tournamentError
+      if (isEdit) {
+        // --- MODE EDIT (UPDATE) ---
+        const { error: updateError } = await supabase
+          .from("tournaments")
+          .update(payload)
+          .eq("id", initialData.id)
 
-      // Insert tournament players
-      if (formData.selected_players.length > 0 && tournament) {
-        const playerInserts = formData.selected_players.map(playerId => ({
-          tournament_id: tournament.id,
+        if (updateError) throw updateError
+        tournamentId = initialData.id
+
+        // Hapus data pemain lama di turnamen ini (nanti di-insert ulang)
+        await supabase.from("tournament_players").delete().eq("tournament_id", tournamentId)
+      } else {
+        // --- MODE ADD (INSERT) ---
+        const { data: tournament, error: insertError } = await supabase
+          .from("tournaments")
+          .insert(payload)
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+        tournamentId = tournament.id
+
+        // Catatan Keuangan (Hanya dicatat saat turnamen baru dibuat)
+        if (payload.registration_fee > 0) {
+          await supabase.from("finances").insert({
+            tournament_id: tournamentId,
+            type: "expense",
+            amount: payload.registration_fee,
+            description: `Registration fee - ${payload.name}`,
+            transaction_date: payload.start_date,
+          })
+        }
+        if (payload.prize_won > 0) {
+          await supabase.from("finances").insert({
+            tournament_id: tournamentId,
+            type: "income",
+            amount: payload.prize_won,
+            description: `Prize money - ${payload.name} (${payload.placement || "Participated"})`,
+            transaction_date: payload.end_date || payload.start_date,
+          })
+        }
+      }
+
+      // Insert ulang pemain yang ikut turnamen (Berlaku untuk Add dan Edit)
+      if (formData.selected_players.length > 0 && tournamentId) {
+        // PERBAIKAN TS: Tambahkan (playerId: number)
+        const playerInserts = formData.selected_players.map((playerId: number) => ({
+          tournament_id: tournamentId,
           player_id: playerId,
         }))
 
@@ -74,32 +118,10 @@ export function TournamentForm({ players }: TournamentFormProps) {
         if (playersError) throw playersError
       }
 
-      // Insert finance record for registration fee
-      if (parseFloat(formData.registration_fee) > 0 && tournament) {
-        await supabase.from("finances").insert({
-          tournament_id: tournament.id,
-          type: "expense",
-          amount: parseFloat(formData.registration_fee),
-          description: `Registration fee - ${formData.name}`,
-          transaction_date: formData.start_date,
-        })
-      }
-
-      // Insert finance record for prize won
-      if (parseFloat(formData.prize_won) > 0 && tournament) {
-        await supabase.from("finances").insert({
-          tournament_id: tournament.id,
-          type: "income",
-          amount: parseFloat(formData.prize_won),
-          description: `Prize money - ${formData.name} (${formData.placement || "Participated"})`,
-          transaction_date: formData.end_date || formData.start_date,
-        })
-      }
-
-      router.push("/admin")
+      router.push("/admin/manage")
       router.refresh()
     } catch (err: any) {
-      setError(err.message || "Failed to add tournament")
+      setError(err.message || "Failed to save tournament")
     } finally {
       setLoading(false)
     }
@@ -109,7 +131,8 @@ export function TournamentForm({ players }: TournamentFormProps) {
     setFormData(prev => ({
       ...prev,
       selected_players: prev.selected_players.includes(playerId)
-        ? prev.selected_players.filter(id => id !== playerId)
+        // PERBAIKAN TS: Tambahkan (id: number)
+        ? prev.selected_players.filter((id: number) => id !== playerId)
         : [...prev.selected_players, playerId],
     }))
   }
@@ -117,18 +140,18 @@ export function TournamentForm({ players }: TournamentFormProps) {
   return (
     <PageWrapper className="container mx-auto px-4 py-8 max-w-2xl">
       <Link 
-        href="/admin" 
+        href="/admin/manage" 
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Admin
+        Back to Manage
       </Link>
 
       <Card className="shadow-sm border-0">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5" />
-            Add New Tournament
+            {isEdit ? "Edit Tournament" : "Add New Tournament"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -267,8 +290,10 @@ export function TournamentForm({ players }: TournamentFormProps) {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding Tournament...
+                  Saving...
                 </>
+              ) : isEdit ? (
+                "Update Tournament"
               ) : (
                 "Add Tournament"
               )}

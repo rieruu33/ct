@@ -1,18 +1,32 @@
 "use client"
 
 import { PageWrapper } from "@/components/page-wrapper"
-import { Player, PlayerStats, HeroPoolStat } from "@/lib/types"
+import { Player, HeroPoolStat } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Instagram, Trophy, Target, Skull, Users, Star } from "lucide-react"
+import { ArrowLeft, Instagram, Trophy, Target, Crown, Star } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
 
+// Tipe kustom sementara agar mengenali properti championships
+interface LocalPlayerStats {
+  total_matches: number
+  wins: number
+  losses: number
+  winrate: number
+  total_mvp: number
+  total_kills: number
+  total_deaths: number
+  total_assists: number
+  tournaments_joined: number
+  championships: number
+}
+
 interface PlayerDetailClientProps {
   player: Player
-  playerStats: PlayerStats
+  playerStats: LocalPlayerStats
   heroPool: HeroPoolStat[]
   recentMatches: any[]
 }
@@ -27,7 +41,8 @@ const roleColors: Record<string, string> = {
 
 export function PlayerDetailClient({ player, playerStats, heroPool, recentMatches }: PlayerDetailClientProps) {
   const signatureHero = heroPool[0]
-  const otherHeroes = heroPool.slice(1, 6)
+  // MENGHAPUS BATASAN SLICE, SEKARANG MENAMPILKAN SEMUA HERO
+  const otherHeroes = heroPool.slice(1)
 
   return (
     <PageWrapper className="container mx-auto px-4 py-8">
@@ -49,8 +64,7 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                   src={`/players/${player.photo_filename}`}
                   alt={player.nickname}
                   fill
-                  priority // TAMBAHKAN INI AGAR LOADING CEPAT
-                  // UBAH 'object-cover' MENJADI 'object-cover object-[center_15%]'
+                  priority
                   className="object-cover object-[center_15%]" 
                 />
               ) : (
@@ -100,7 +114,7 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
 
         {/* Stats & Hero Pool */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Signature Hero (VERSI DIPERBESAR) */}
+          {/* Signature Hero */}
           {signatureHero && (
             <Card className="shadow-sm border-0">
               <CardHeader className="pb-4">
@@ -108,8 +122,6 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col sm:flex-row gap-8 items-center sm:items-center">
-                  
-                  {/* Kotak Gambar Diperbesar (w-40 h-40) */}
                   <div className="w-40 h-40 relative rounded-2xl overflow-hidden bg-muted shrink-0 shadow-sm border border-muted/20">
                     <Image
                       src={`/heroes/${signatureHero.hero_id}.png`}
@@ -118,8 +130,6 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                       className="object-cover"
                     />
                   </div>
-                  
-                  {/* Bagian Teks & Statistik */}
                   <div className="flex-1 w-full text-center sm:text-left">
                     <h3 className="text-3xl font-bold tracking-tight">{signatureHero.hero_name}</h3>
                     <Badge variant="secondary" className="mt-2 mb-4 text-sm px-3 py-0.5">{signatureHero.hero_role}</Badge>
@@ -143,7 +153,6 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                       </div>
                     </div>
                   </div>
-
                 </div>
               </CardContent>
             </Card>
@@ -156,14 +165,15 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                 <CardTitle className="text-lg font-semibold">Other Hero Pool</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-4 overflow-x-auto pb-2">
+                {/* CSS ditambahkan untuk membungkus hero jika jumlahnya banyak (flex-wrap) */}
+                <div className="flex gap-4 flex-wrap pb-2">
                   {otherHeroes.map((hero, index) => (
                     <motion.div
                       key={hero.hero_id}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex flex-col items-center gap-2 shrink-0"
+                      transition={{ delay: index * 0.05 }} // Animasi dipercepat
+                      className="flex flex-col items-center gap-2 shrink-0 mb-2"
                     >
                       <div className="w-16 h-16 relative rounded-full overflow-hidden bg-muted">
                         <Image
@@ -191,12 +201,21 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
               <CardTitle className="text-lg font-semibold">Player Statistics</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {/* GRID DIUBAH MENJADI 5 KOLOM */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div className="p-4 rounded-xl bg-muted/50 text-center">
-                  <Trophy className="h-5 w-5 mx-auto mb-2 text-yellow-600" />
+                  <Trophy className="h-5 w-5 mx-auto mb-2 text-slate-600" />
                   <p className="text-2xl font-bold">{playerStats.tournaments_joined}</p>
                   <p className="text-xs text-muted-foreground">Tournaments</p>
                 </div>
+                
+                {/* KARTU CHAMPION BARU DITAMBAHKAN */}
+                <div className="p-4 rounded-xl bg-gradient-to-b from-yellow-50 to-white border border-yellow-100 text-center">
+                  <Crown className="h-5 w-5 mx-auto mb-2 text-yellow-500" />
+                  <p className="text-2xl font-bold text-yellow-600">{playerStats.championships}</p>
+                  <p className="text-xs text-muted-foreground">Champions</p>
+                </div>
+
                 <div className="p-4 rounded-xl bg-muted/50 text-center">
                   <Target className="h-5 w-5 mx-auto mb-2 text-blue-600" />
                   <p className="text-2xl font-bold">{playerStats.total_matches}</p>
@@ -231,7 +250,7 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
             </CardContent>
           </Card>
 
-          {/* Recent Match History */}
+          {/* Recent Match History (TETAP SAMA) */}
           <Card className="shadow-sm border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold">Recent Match History</CardTitle>

@@ -3,7 +3,8 @@
 import { PageWrapper } from "@/components/page-wrapper"
 import { Player, Hero, Tournament } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Settings, Trophy, Users, Swords, Plus, Trash2 } from "lucide-react"
+// TAMBAHAN: Import CircleDollarSign untuk ikon Finance
+import { Settings, Trophy, Users, Swords, Plus, Trash2, CircleDollarSign } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 
@@ -42,9 +43,17 @@ const adminCards = [
     icon: Swords,
     color: "bg-purple-500/10 text-purple-700",
   },
-    {
+  // TAMBAHAN: Menu Add Finance
+  {
+    title: "Add Finance",
+    description: "Record a new income or expense manually",
+    href: "/admin/finance",
+    icon: CircleDollarSign,
+    color: "bg-emerald-500/10 text-emerald-700",
+  },
+  {
     title: "Manage Data",
-    description: "Delete tournaments, matches, and players",
+    description: "Edit & delete tournaments, matches, players, finances",
     href: "/admin/manage",
     icon: Trash2,
     color: "bg-gray-500/10 text-gray-700",
@@ -84,9 +93,9 @@ export function AdminClient({ players, heroes, tournaments }: AdminClientProps) 
         </Card>
       </div>
 
-      {/* Admin Actions */}
+      {/* Admin Actions - Grid diubah menjadi 3 kolom (lg:grid-cols-3) agar 6 kartu rapi */}
       <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {adminCards.map((card, index) => {
           const Icon = card.icon
           return (

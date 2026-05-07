@@ -12,19 +12,21 @@ import { createClient } from "@/lib/supabase/client"
 
 const roles = ["Gold Laner", "EXP Laner", "Mid Laner", "Roamer", "Jungler"]
 
-export function PlayerForm() {
+export function PlayerForm({ initialData }: { initialData?: any }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isEdit = !!initialData
+
   const [formData, setFormData] = useState({
-    full_name: "",
-    nickname: "",
-    team_id: "",
-    ingame_id: "",
-    role: "Gold Laner",
-    instagram_url: "",
-    photo_filename: "",
+    full_name: initialData?.full_name || "",
+    nickname: initialData?.nickname || "",
+    team_id: initialData?.team_id || "",
+    ingame_id: initialData?.ingame_id || "",
+    role: initialData?.role || "Gold Laner",
+    instagram_url: initialData?.instagram_url || "",
+    photo_filename: initialData?.photo_filename || "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,25 +36,37 @@ export function PlayerForm() {
 
     try {
       const supabase = createClient()
+      const payload = {
+        full_name: formData.full_name,
+        nickname: formData.nickname,
+        team_id: formData.team_id || null,
+        ingame_id: formData.ingame_id || null,
+        role: formData.role,
+        instagram_url: formData.instagram_url || null,
+        photo_filename: formData.photo_filename || null,
+      }
 
-      const { error: insertError } = await supabase
-        .from("players")
-        .insert({
-          full_name: formData.full_name,
-          nickname: formData.nickname,
-          team_id: formData.team_id || null,
-          ingame_id: formData.ingame_id || null,
-          role: formData.role,
-          instagram_url: formData.instagram_url || null,
-          photo_filename: formData.photo_filename || null,
-        })
+      if (isEdit) {
+        // --- MODE EDIT (UPDATE) ---
+        const { error: updateError } = await supabase
+          .from("players")
+          .update(payload)
+          .eq("id", initialData.id)
 
-      if (insertError) throw insertError
+        if (updateError) throw updateError
+      } else {
+        // --- MODE ADD (INSERT) ---
+        const { error: insertError } = await supabase
+          .from("players")
+          .insert(payload)
 
-      router.push("/admin")
+        if (insertError) throw insertError
+      }
+
+      router.push("/admin/manage")
       router.refresh()
     } catch (err: any) {
-      setError(err.message || "Failed to add player")
+      setError(err.message || "Failed to save player")
     } finally {
       setLoading(false)
     }
@@ -61,18 +75,18 @@ export function PlayerForm() {
   return (
     <PageWrapper className="container mx-auto px-4 py-8 max-w-2xl">
       <Link 
-        href="/admin" 
+        href="/admin/manage" 
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Admin
+        Back to Manage
       </Link>
 
       <Card className="shadow-sm border-0">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Add New Player
+            {isEdit ? "Edit Player" : "Add New Player"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -161,8 +175,10 @@ export function PlayerForm() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding Player...
+                  Saving...
                 </>
+              ) : isEdit ? (
+                "Update Player"
               ) : (
                 "Add Player"
               )}

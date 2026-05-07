@@ -7,7 +7,7 @@ import { Player, Hero, Tournament } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, Swords, Loader2, Plus, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, Swords, Loader2, Plus, Trash2, Upload, ImageIcon } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -16,6 +16,7 @@ interface MatchFormProps {
   players: Player[]
   heroes: Hero[]
   tournaments: Tournament[]
+  initialData?: any
 }
 
 interface PlayerStatInput {
@@ -27,29 +28,48 @@ interface PlayerStatInput {
   assists: number
 }
 
-export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
+export function MatchForm({ players, heroes, tournaments, initialData }: MatchFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isEdit = !!initialData
+
+let defaultDate = ""
+  let defaultTime = ""
+  if (initialData?.match_date) {
+    const dateObj = new Date(initialData.match_date)
+    // Ambil tanggal sesuai zona waktu lokal (WIB)
+    const year = dateObj.getFullYear()
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const day = String(dateObj.getDate()).padStart(2, '0')
+    defaultDate = `${year}-${month}-${day}`
+    
+    // Ambil jam sesuai zona waktu lokal (Format 24 Jam)
+    const hours = String(dateObj.getHours()).padStart(2, '0')
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0')
+    defaultTime = `${hours}:${minutes}`
+  }
+
   const [formData, setFormData] = useState({
-    tournament_id: "",
-    opponent_name: "",
-    match_date: "",
-    match_time: "",
-    is_win: true,
-    our_score: "0",
-    opponent_score: "0",
-    notes: "",
+    tournament_id: initialData?.tournament_id?.toString() || "",
+    opponent_name: initialData?.opponent_name || "",
+    match_date: defaultDate,
+    match_time: defaultTime,
+    is_win: initialData ? initialData.is_win : true,
+    // FITUR BARU: Menyimpan state First Pick (default true)
+    is_first_pick: initialData?.is_first_pick ?? true,
+    our_score: initialData?.our_score?.toString() || "0",
+    opponent_score: initialData?.opponent_score?.toString() || "0",
+    notes: initialData?.notes || "",
   })
 
-  // State baru untuk menyimpan file gambar yang diupload
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
-
-  const [playerStats, setPlayerStats] = useState<PlayerStatInput[]>([])
-  const [ourBans, setOurBans] = useState<string[]>([])
-  const [enemyBans, setEnemyBans] = useState<string[]>([])
-  const [enemyPicks, setEnemyPicks] = useState<string[]>([])
+  
+  const [playerStats, setPlayerStats] = useState<PlayerStatInput[]>(initialData?.player_stats || [])
+  const [ourBans, setOurBans] = useState<string[]>(initialData?.our_bans || [])
+  const [enemyBans, setEnemyBans] = useState<string[]>(initialData?.enemy_bans || [])
+  const [enemyPicks, setEnemyPicks] = useState<string[]>(initialData?.enemy_picks || [])
 
   const addPlayerStat = () => {
     if (players.length > 0) {
@@ -71,7 +91,6 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
   const updatePlayerStat = (index: number, field: keyof PlayerStatInput, value: any) => {
     const updated = [...playerStats]
     updated[index] = { ...updated[index], [field]: value }
-    // If setting MVP, unset others
     if (field === "is_mvp" && value === true) {
       updated.forEach((stat, i) => {
         if (i !== index) stat.is_mvp = false
@@ -87,13 +106,13 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
 
     try {
       const supabase = createClient()
-      const matchDateTime = `${formData.match_date}T${formData.match_time || "00:00"}:00`
+      // Memaksa sistem membaca input sebagai waktu lokal sebelum dikirim ke database
+const localDate = new Date(`${formData.match_date}T${formData.match_time || "00:00"}:00`)
+const matchDateTime = localDate.toISOString()
 
-      let finalScreenshotUrl = null
+      let finalScreenshotUrl = initialData?.screenshot_url || null
 
-      // Logika untuk upload gambar ke Supabase Storage
       if (screenshotFile) {
-        // Buat nama file unik agar tidak bentrok
         const fileExt = screenshotFile.name.split('.').pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
@@ -101,11 +120,8 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
           .from('screenshots')
           .upload(fileName, screenshotFile)
 
-        if (uploadError) {
-          throw new Error(`Gagal upload gambar: ${uploadError.message}`)
-        }
+        if (uploadError) throw new Error(`Gagal upload gambar: ${uploadError.message}`)
 
-        // Ambil Public URL dari gambar yang baru diupload
         const { data: publicUrlData } = supabase.storage
           .from('screenshots')
           .getPublicUrl(fileName)
@@ -113,86 +129,93 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
         finalScreenshotUrl = publicUrlData.publicUrl
       }
 
-      // Insert match (sekarang menggunakan finalScreenshotUrl)
-      const { data: match, error: matchError } = await supabase
-        .from("matches")
-        .insert({
-          tournament_id: formData.tournament_id ? parseInt(formData.tournament_id) : null,
-          opponent_name: formData.opponent_name,
-          match_date: matchDateTime,
-          is_win: formData.is_win,
-          our_score: parseInt(formData.our_score) || 0,
-          opponent_score: parseInt(formData.opponent_score) || 0,
-          screenshot_url: finalScreenshotUrl,
-          notes: formData.notes || null,
-        })
-        .select()
-        .single()
-
-      if (matchError) throw matchError
-
-      // Insert player stats
-      if (playerStats.length > 0 && match) {
-        const statsInserts = playerStats.map(stat => ({
-          match_id: match.id,
-          player_id: stat.player_id,
-          hero_id: stat.hero_id,
-          is_mvp: stat.is_mvp,
-          is_win: formData.is_win,
-          kills: stat.kills,
-          deaths: stat.deaths,
-          assists: stat.assists,
-        }))
-
-        const { error: statsError } = await supabase
-          .from("match_player_stats")
-          .insert(statsInserts)
-
-        if (statsError) throw statsError
+      const matchPayload = {
+        tournament_id: formData.tournament_id ? parseInt(formData.tournament_id) : null,
+        opponent_name: formData.opponent_name,
+        match_date: matchDateTime,
+        is_win: formData.is_win,
+        // FITUR BARU: Menyisipkan payload is_first_pick ke database
+        is_first_pick: formData.is_first_pick,
+        our_score: parseInt(formData.our_score) || 0,
+        opponent_score: parseInt(formData.opponent_score) || 0,
+        screenshot_url: finalScreenshotUrl,
+        notes: formData.notes || null,
       }
 
-      // Insert our bans
-      if (ourBans.length > 0 && match) {
-        const banInserts = ourBans.filter(b => b).map(heroId => ({
-          match_id: match.id,
-          hero_id: heroId,
-          is_our_ban: true,
-        }))
+      let matchId = null
 
-        if (banInserts.length > 0) {
-          await supabase.from("match_bans").insert(banInserts)
+      if (isEdit) {
+        const { error: matchError } = await supabase
+          .from("matches")
+          .update(matchPayload)
+          .eq("id", initialData.id)
+
+        if (matchError) throw matchError
+        matchId = initialData.id
+
+        await Promise.all([
+          supabase.from("match_player_stats").delete().eq("match_id", matchId),
+          supabase.from("match_bans").delete().eq("match_id", matchId),
+          supabase.from("match_opponent_picks").delete().eq("match_id", matchId),
+        ])
+      } else {
+        const { data: match, error: matchError } = await supabase
+          .from("matches")
+          .insert(matchPayload)
+          .select()
+          .single()
+
+        if (matchError) throw matchError
+        matchId = match.id
+      }
+
+      if (matchId) {
+        if (playerStats.length > 0) {
+          const statsInserts = playerStats.map((stat) => ({
+            match_id: matchId,
+            player_id: stat.player_id,
+            hero_id: stat.hero_id,
+            is_mvp: stat.is_mvp,
+            is_win: formData.is_win,
+            kills: stat.kills,
+            deaths: stat.deaths,
+            assists: stat.assists,
+          }))
+          const { error: statsError } = await supabase.from("match_player_stats").insert(statsInserts)
+          if (statsError) throw statsError
+        }
+
+        if (ourBans.length > 0) {
+          const banInserts = ourBans.filter(b => b).map((heroId) => ({
+            match_id: matchId,
+            hero_id: heroId,
+            is_our_ban: true,
+          }))
+          if (banInserts.length > 0) await supabase.from("match_bans").insert(banInserts)
+        }
+
+        if (enemyBans.length > 0) {
+          const banInserts = enemyBans.filter(b => b).map((heroId) => ({
+            match_id: matchId,
+            hero_id: heroId,
+            is_our_ban: false,
+          }))
+          if (banInserts.length > 0) await supabase.from("match_bans").insert(banInserts)
+        }
+
+        if (enemyPicks.length > 0) {
+          const pickInserts = enemyPicks.filter(p => p).map((heroId) => ({
+            match_id: matchId,
+            hero_id: heroId,
+          }))
+          if (pickInserts.length > 0) await supabase.from("match_opponent_picks").insert(pickInserts)
         }
       }
 
-      // Insert enemy bans
-      if (enemyBans.length > 0 && match) {
-        const banInserts = enemyBans.filter(b => b).map(heroId => ({
-          match_id: match.id,
-          hero_id: heroId,
-          is_our_ban: false,
-        }))
-
-        if (banInserts.length > 0) {
-          await supabase.from("match_bans").insert(banInserts)
-        }
-      }
-
-      // Insert enemy picks
-      if (enemyPicks.length > 0 && match) {
-        const pickInserts = enemyPicks.filter(p => p).map(heroId => ({
-          match_id: match.id,
-          hero_id: heroId,
-        }))
-
-        if (pickInserts.length > 0) {
-          await supabase.from("match_opponent_picks").insert(pickInserts)
-        }
-      }
-
-      router.push("/admin")
+      router.push("/admin/manage")
       router.refresh()
     } catch (err: any) {
-      setError(err.message || "Failed to add match")
+      setError(err.message || "Failed to save match")
     } finally {
       setLoading(false)
     }
@@ -201,23 +224,22 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
   return (
     <PageWrapper className="container mx-auto px-4 py-8 max-w-3xl">
       <Link 
-        href="/admin" 
+        href="/admin/manage" 
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Admin
+        Back to Manage
       </Link>
 
       <Card className="shadow-sm border-0">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Swords className="h-5 w-5" />
-            Add New Match
+            {isEdit ? "Edit Match" : "Add New Match"}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Match Info */}
             <div className="space-y-4">
               <h3 className="font-medium">Match Information</h3>
               
@@ -235,14 +257,28 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Opponent Name *</label>
-                <Input
-                  required
-                  value={formData.opponent_name}
-                  onChange={e => setFormData(prev => ({ ...prev, opponent_name: e.target.value }))}
-                  placeholder="e.g., Team Alpha"
-                />
+              {/* FITUR BARU: Dropdown Pemilihan First Pick / Second Pick */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Opponent Name *</label>
+                  <Input
+                    required
+                    value={formData.opponent_name}
+                    onChange={e => setFormData(prev => ({ ...prev, opponent_name: e.target.value }))}
+                    placeholder="e.g., Team Alpha"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Draft Position *</label>
+                  <select
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-medium text-blue-700"
+                    value={formData.is_first_pick ? "true" : "false"}
+                    onChange={e => setFormData(prev => ({ ...prev, is_first_pick: e.target.value === "true" }))}
+                  >
+                    <option value="true">1st Pick (First Pick)</option>
+                    <option value="false">2nd Pick (Second Pick)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -258,10 +294,12 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Match Time</label>
                   <Input
-                    type="time"
-                    value={formData.match_time}
-                    onChange={e => setFormData(prev => ({ ...prev, match_time: e.target.value }))}
-                  />
+  type="time"
+  step="60" // Memaksa browser menggunakan format menit yang bersih
+  lang="en-GB" // Trik: Pakai bahasa Inggris Inggris (UK) karena standarnya 24 jam
+  value={formData.match_time}
+  onChange={e => setFormData(prev => ({ ...prev, match_time: e.target.value }))}
+/>
                 </div>
               </div>
 
@@ -297,9 +335,15 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
                 </div>
               </div>
 
-              {/* Perubahan Input Upload Gambar di sini */}
               <div>
-                <label className="block text-sm font-medium mb-1.5">Upload Screenshot Match</label>
+                <label className="block text-sm font-medium mb-1.5">Screenshot Match</label>
+                {initialData?.screenshot_url && !screenshotFile && (
+                  <div className="mb-3 flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground flex-1 truncate">Gambar saat ini sudah tersimpan.</span>
+                    <a href={initialData.screenshot_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">Lihat</a>
+                  </div>
+                )}
                 <Input
                   type="file"
                   accept="image/*"
@@ -309,14 +353,19 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
                   }}
                   className="cursor-pointer"
                 />
-                {screenshotFile && (
+                {screenshotFile ? (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                     <Upload className="w-3 h-3" /> {screenshotFile.name} siap diupload.
                   </p>
+                ) : (
+                   <p className="text-xs text-muted-foreground mt-2">
+                     {isEdit ? "Biarkan kosong jika tidak ingin mengubah gambar." : "Upload screenshot hasil pertandingan."}
+                   </p>
                 )}
               </div>
             </div>
 
+            {/* Sisa UI seperti Player Stats, Bans & Picks dibiarkan persis sama */}
             {/* Player Stats */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -517,8 +566,10 @@ export function MatchForm({ players, heroes, tournaments }: MatchFormProps) {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding Match...
+                  Saving...
                 </>
+              ) : isEdit ? (
+                "Update Match"
               ) : (
                 "Add Match"
               )}

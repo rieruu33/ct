@@ -20,10 +20,20 @@ export default async function FinancePage() {
     .select("*")
     .order("start_date", { ascending: false })
 
-  // Calculate monthly summary for chart
+  // 1. PISAHKAN MODAL AWAL DARI TRANSAKSI BIASA
+  // Cari transaksi yang deskripsinya persis "INITIAL_BALANCE"
+  const initialBalanceRecord = finances?.find(f => f.description === "INITIAL_BALANCE")
+  const initialCash = initialBalanceRecord && initialBalanceRecord.type === "income" 
+    ? Number(initialBalanceRecord.amount) 
+    : 0
+
+  // Buat daftar transaksi bersih (tanpa modal awal) untuk grafik dan riwayat
+  const regularFinances = finances?.filter(f => f.description !== "INITIAL_BALANCE") || []
+
+  // Calculate monthly summary for chart USING REGULAR FINANCES ONLY
   const monthlyData = new Map<string, { income: number; expense: number }>()
   
-  finances?.forEach(f => {
+  regularFinances.forEach(f => {
     const month = f.transaction_date.substring(0, 7) // YYYY-MM
     const existing = monthlyData.get(month) || { income: 0, expense: 0 }
     if (f.type === "income") {
@@ -44,17 +54,21 @@ export default async function FinancePage() {
     .sort((a, b) => a.month.localeCompare(b.month))
     .slice(-12) // Last 12 months
 
-  // Calculate totals
-  const totalIncome = finances?.filter(f => f.type === "income").reduce((sum, f) => sum + Number(f.amount), 0) || 0
-  const totalExpense = finances?.filter(f => f.type === "expense").reduce((sum, f) => sum + Number(f.amount), 0) || 0
+  // Calculate totals USING REGULAR FINANCES ONLY
+  const totalIncome = regularFinances.filter(f => f.type === "income").reduce((sum, f) => sum + Number(f.amount), 0)
+  const totalExpense = regularFinances.filter(f => f.type === "expense").reduce((sum, f) => sum + Number(f.amount), 0)
+
+  // 2. HITUNG SISA KAS TIM (Modal Awal + Total Pemasukan - Total Pengeluaran)
+  const teamCash = initialCash + totalIncome - totalExpense
 
   return (
     <FinanceClient
-      finances={finances || []}
+      finances={regularFinances} // Melempar data bersih ke client
       tournaments={tournaments || []}
       chartData={chartData}
       totalIncome={totalIncome}
       totalExpense={totalExpense}
+      teamCash={teamCash} // Melempar nilai Kas Tim ke client
     />
   )
 }

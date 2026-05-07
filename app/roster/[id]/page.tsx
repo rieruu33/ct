@@ -37,11 +37,20 @@ export default async function PlayerDetailPage({ params }: PageProps) {
     .eq("player_id", player.id)
     .order("created_at", { ascending: false })
 
-  // Fetch tournament count for this player
-  const { count: tournamentCount } = await supabase
+  // FITUR BARU: Fetch turnamen yang diikuti player ini beserta detail turnamennya
+  const { data: tournamentData } = await supabase
     .from("tournament_players")
-    .select("*", { count: "exact", head: true })
+    .select(`
+      tournament_id,
+      tournament:tournaments(*)
+    `)
     .eq("player_id", player.id)
+
+  // Hitung total turnamen dan berapa kali jadi Champion
+  const tournamentCount = tournamentData?.length || 0
+  const championships = tournamentData?.filter((td: any) => 
+  td.tournament && (td.tournament as any).placement === "Champion"
+).length || 0
 
   // Calculate hero pool stats
   const heroPoolMap = new Map<string, {
@@ -101,7 +110,8 @@ export default async function PlayerDetailPage({ params }: PageProps) {
     total_kills: totalKills,
     total_deaths: totalDeaths,
     total_assists: totalAssists,
-    tournaments_joined: tournamentCount || 0,
+    tournaments_joined: tournamentCount,
+    championships: championships, // Data baru ditambahkan
   }
 
   // Get recent matches
@@ -117,7 +127,7 @@ export default async function PlayerDetailPage({ params }: PageProps) {
   return (
     <PlayerDetailClient
       player={player}
-      playerStats={playerStats}
+      playerStats={playerStats as any} // Di-cast ke any untuk menghindari error typescript sementara
       heroPool={heroPool}
       recentMatches={recentMatches}
     />

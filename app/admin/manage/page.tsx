@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { PageWrapper } from "@/components/page-wrapper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Trash2, Trophy, Swords, Users, Loader2, AlertTriangle } from "lucide-react"
+// TAMBAHAN: Import icon Edit dan CircleDollarSign untuk tab Finance
+import { ArrowLeft, Trash2, Trophy, Swords, Users, Loader2, AlertTriangle, Edit, CircleDollarSign } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { motion, AnimatePresence } from "framer-motion"
@@ -35,13 +36,26 @@ interface Player {
   role: string
 }
 
-type Tab = "tournaments" | "matches" | "players"
+// TAMBAHAN: Interface untuk Finance
+interface Finance {
+  id: number
+  tournament_id: number | null
+  type: string
+  amount: number
+  description: string
+  transaction_date: string
+  tournaments?: { name: string } | null
+}
+
+// TAMBAHAN: Tambahkan "finances" ke dalam tipe Tab
+type Tab = "tournaments" | "matches" | "players" | "finances"
 
 export default function ManagePage() {
   const [activeTab, setActiveTab] = useState<Tab>("tournaments")
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [players, setPlayers] = useState<Player[]>([])
+  const [finances, setFinances] = useState<Finance[]>([]) // State untuk finances
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ type: Tab; id: number; name: string } | null>(null)
@@ -55,15 +69,18 @@ export default function ManagePage() {
   const fetchData = async () => {
     setLoading(true)
     
-    const [tournamentsRes, matchesRes, playersRes] = await Promise.all([
+    // TAMBAHAN: Fetch data finances
+    const [tournamentsRes, matchesRes, playersRes, financesRes] = await Promise.all([
       supabase.from("tournaments").select("*").order("start_date", { ascending: false }),
       supabase.from("matches").select("*, tournaments(name)").order("match_date", { ascending: false }),
       supabase.from("players").select("*").order("nickname", { ascending: true }),
+      supabase.from("finances").select("*, tournaments(name)").order("transaction_date", { ascending: false }),
     ])
 
     setTournaments(tournamentsRes.data || [])
     setMatches(matchesRes.data || [])
     setPlayers(playersRes.data || [])
+    setFinances(financesRes.data || [])
     setLoading(false)
   }
 
@@ -73,8 +90,10 @@ export default function ManagePage() {
     setDeleting(confirmDelete.id)
 
     try {
+      // Tentukan tabel berdasarkan tipe
       const table = confirmDelete.type === "tournaments" ? "tournaments" : 
-                    confirmDelete.type === "matches" ? "matches" : "players"
+                    confirmDelete.type === "matches" ? "matches" : 
+                    confirmDelete.type === "players" ? "players" : "finances"
       
       const { error } = await supabase.from(table).delete().eq("id", confirmDelete.id)
 
@@ -85,8 +104,10 @@ export default function ManagePage() {
         setTournaments(prev => prev.filter(t => t.id !== confirmDelete.id))
       } else if (confirmDelete.type === "matches") {
         setMatches(prev => prev.filter(m => m.id !== confirmDelete.id))
-      } else {
+      } else if (confirmDelete.type === "players") {
         setPlayers(prev => prev.filter(p => p.id !== confirmDelete.id))
+      } else {
+        setFinances(prev => prev.filter(f => f.id !== confirmDelete.id))
       }
 
       setConfirmDelete(null)
@@ -97,10 +118,15 @@ export default function ManagePage() {
     }
   }
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount)
+  }
+
   const tabs = [
     { id: "tournaments" as Tab, label: "Tournaments", icon: Trophy, count: tournaments.length },
     { id: "matches" as Tab, label: "Matches", icon: Swords, count: matches.length },
     { id: "players" as Tab, label: "Players", icon: Users, count: players.length },
+    { id: "finances" as Tab, label: "Finances", icon: CircleDollarSign, count: finances.length }, // Tab baru
   ]
 
   return (
@@ -115,11 +141,11 @@ export default function ManagePage() {
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight">Manage Data</h1>
-        <p className="text-muted-foreground mt-1">Delete tournaments, matches, and players</p>
+        <p className="text-muted-foreground mt-1">Delete & Edit tournaments, matches, players, and finances</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {tabs.map(tab => {
           const Icon = tab.icon
           return (
@@ -153,6 +179,7 @@ export default function ManagePage() {
             </div>
           ) : (
             <div className="divide-y">
+              {/* TOURNAMENTS */}
               {activeTab === "tournaments" && (
                 tournaments.length === 0 ? (
                   <div className="py-12 text-center text-muted-foreground">No tournaments found</div>
@@ -173,6 +200,13 @@ export default function ManagePage() {
                         }`}>
                           {tournament.status}
                         </span>
+                        
+                        <Link href={`/admin/tournament/edit/${tournament.id}`}>
+                          <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -187,6 +221,7 @@ export default function ManagePage() {
                 )
               )}
 
+              {/* MATCHES */}
               {activeTab === "matches" && (
                 matches.length === 0 ? (
                   <div className="py-12 text-center text-muted-foreground">No matches found</div>
@@ -205,19 +240,28 @@ export default function ManagePage() {
                           {match.tournaments?.name || "No tournament"} - {format(new Date(match.match_date), "MMM d, yyyy")}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => setConfirmDelete({ type: "matches", id: match.id, name: `vs ${match.opponent_name}` })}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/admin/match/edit/${match.id}`}>
+                          <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setConfirmDelete({ type: "matches", id: match.id, name: `vs ${match.opponent_name}` })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))
                 )
               )}
 
+              {/* PLAYERS */}
               {activeTab === "players" && (
                 players.length === 0 ? (
                   <div className="py-12 text-center text-muted-foreground">No players found</div>
@@ -230,14 +274,60 @@ export default function ManagePage() {
                           {player.full_name} - {player.role}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => setConfirmDelete({ type: "players", id: player.id, name: player.nickname })}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/admin/player/edit/${player.id}`}>
+                          <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setConfirmDelete({ type: "players", id: player.id, name: player.nickname })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )
+              )}
+
+              {/* FINANCES (TAB BARU) */}
+              {activeTab === "finances" && (
+                finances.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground">No finance records found</div>
+                ) : (
+                  finances.map(finance => (
+                    <div key={finance.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                      <div>
+                        <p className="font-medium flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${finance.type === "income" ? "bg-green-500" : "bg-red-500"}`} />
+                          {finance.description || "No description"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(finance.amount)} • {format(new Date(finance.transaction_date), "MMM d, yyyy")}
+                          {finance.tournaments?.name && ` • ${finance.tournaments.name}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {/* Tombol Edit Keuangan */}
+                        <Link href={`/admin/finance/edit/${finance.id}`}>
+                          <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setConfirmDelete({ type: "finances", id: finance.id, name: finance.description || "this transaction" })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))
                 )

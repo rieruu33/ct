@@ -4,7 +4,7 @@ import { PageWrapper } from "@/components/page-wrapper"
 import { Finance, Tournament } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { DollarSign, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, Coins } from "lucide-react"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
 import {
@@ -19,8 +19,8 @@ import {
   Bar,
 } from "recharts"
 
-interface FinanceWithTournament extends Finance {
-  tournament: Tournament | null
+interface FinanceWithTournament extends Omit<Finance, 'tournament'> {
+  tournament: Tournament | null | undefined
 }
 
 interface ChartDataPoint {
@@ -36,13 +36,15 @@ interface FinanceClientProps {
   chartData: ChartDataPoint[]
   totalIncome: number
   totalExpense: number
+  teamCash: number // TAMBAHAN: Prop baru untuk Kas Tim
 }
 
 export function FinanceClient({ 
   finances, 
   chartData, 
   totalIncome, 
-  totalExpense 
+  totalExpense,
+  teamCash // TAMBAHAN
 }: FinanceClientProps) {
   const balance = totalIncome - totalExpense
 
@@ -73,12 +75,34 @@ export function FinanceClient({
         <p className="text-muted-foreground mt-1">Tournament income and expenses in Rupiah</p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Summary Cards - Grid diubah menjadi 5 kolom di desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        
+        {/* KARTU BARU: TEAM CASH */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0 }}
+        >
+          <Card className="shadow-sm border-0 bg-blue-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium opacity-90 text-blue-100">Team Cash</p>
+                  <p className="text-2xl font-bold mt-1">{formatCurrency(teamCash)}</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Coins className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
         >
           <Card className="shadow-sm border-0">
             <CardContent className="p-6">
@@ -98,7 +122,7 @@ export function FinanceClient({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.2 }}
         >
           <Card className="shadow-sm border-0">
             <CardContent className="p-6">
@@ -118,7 +142,7 @@ export function FinanceClient({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.3 }}
         >
           <Card className="shadow-sm border-0">
             <CardContent className="p-6">
@@ -140,7 +164,7 @@ export function FinanceClient({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.4 }}
         >
           <Card className="shadow-sm border-0">
             <CardContent className="p-6">
