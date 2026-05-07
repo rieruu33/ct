@@ -1,0 +1,3 @@
+# Place MLBB hero images here
+# Filename format: hero_id.png (e.g., miya.png, layla.png)
+# The hero_id should match the ID stored in the database

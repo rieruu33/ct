@@ -1,0 +1,3 @@
+# Place player photos here
+# Filename format: playername.jpg (e.g., player1.jpg)
+# Reference the filename in the player's photo_filename field in the database
