@@ -5,7 +5,7 @@ export const revalidate = 0
 
 export default async function StatsPage({ searchParams }: { searchParams: Promise<{ startDate?: string }> }) {
   const resolvedParams = await searchParams
-  const startDate = resolvedParams.startDate || "2026-05-07"
+  const startDate = resolvedParams.startDate || "2026-04-09"
 
   const supabase = await createClient()
 
