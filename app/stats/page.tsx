@@ -9,22 +9,24 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
   const supabase = await createClient()
 
-  // 1. Ambil SEMUA data tanpa filter tanggal di query agar stat global tetap aman
-  const [matchesRes, matchStatsRes, bansRes, tournamentsRes, financesRes] = await Promise.all([
+  // 1. Ambil SEMUA data
+  const [matchesRes, matchStatsRes, bansRes, tournamentsRes, financesRes, opponentPicksRes] = await Promise.all([
     supabase.from("matches").select("*"),
     supabase.from("match_player_stats").select(`*, hero:heroes(*), player:players(*)`),
     supabase.from("match_bans").select(`*, hero:heroes(*)`),
     supabase.from("tournaments").select("*"),
-    supabase.from("finances").select("*")
+    supabase.from("finances").select("*"),
+    supabase.from("match_opponent_picks").select(`*, hero:heroes(*)`) 
   ])
 
   const allMatches = matchesRes.data || []
   const allMatchStats = matchStatsRes.data || []
   const allBans = bansRes.data || []
+  const allOpponentPicks = opponentPicksRes.data || []
   const tournaments = tournamentsRes.data || []
   const finances = financesRes.data || []
 
-  // --- STATISTIK GLOBAL (ALL TIME) ---
+  // --- STATISTIK GLOBAL ---
   const totalMatches = allMatches.length
   const wins = allMatches.filter(m => m.is_win).length
   const losses = totalMatches - wins
@@ -32,17 +34,19 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
   const totalTournaments = tournaments.length
   const completedTournaments = tournaments.filter(t => t.status === "completed").length
+  
   const totalPrize = finances
     ?.filter(f => f.type === "income" && f.description !== "INITIAL_BALANCE")
     .reduce((sum, f) => sum + Number(f.amount), 0) || 0
   const championships = tournaments.filter(t => t.placement === "Champion").length
 
-  // --- FILTER KHUSUS UNTUK DRAFTING & BANS ---
+  // --- FILTER KHUSUS DRAFTING & BANS (Berdasarkan StartDate) ---
   const filteredMatches = allMatches.filter(m => m.match_date >= startDate + "T00:00:00")
   const filteredMatchIds = filteredMatches.map(m => m.id)
   const filteredBans = allBans.filter(b => filteredMatchIds.includes(b.match_id))
+  const filteredOpponentPicks = allOpponentPicks.filter(p => filteredMatchIds.includes(p.match_id))
 
-  // Calculate Draft Stats (Hanya dari filteredMatches)
+  // Calculate Draft Stats
   const firstPickMatches = filteredMatches.filter(m => m.is_first_pick)
   const secondPickMatches = filteredMatches.filter(m => !m.is_first_pick)
 
@@ -59,7 +63,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     }
   }
 
-  // Calculate Ban Stats (Hanya dari filteredBans)
+  // Calculate Ban Stats
   const getTopBans = (isOurBan: boolean, isFirstPick: boolean) => {
     const map = new Map<string, { hero: any, count: number }>()
     filteredBans.forEach(b => {
@@ -82,7 +86,33 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     enemySecondPick: getTopBans(false, false)
   }
 
-  // --- HERO & PLAYER STATS (TETAP ALL TIME) ---
+  // --- ANALISIS HERO MUSUH ---
+  const enemyHeroMap = new Map<string, { hero: any, total: number, enemyWins: number }>()
+  
+  filteredOpponentPicks.forEach(pick => {
+    const match = filteredMatches.find(m => m.id === pick.match_id)
+    if (match && pick.hero) {
+      const existing = enemyHeroMap.get(pick.hero_id) || { hero: pick.hero, total: 0, enemyWins: 0 }
+      existing.total++
+      if (!match.is_win) existing.enemyWins++
+      enemyHeroMap.set(pick.hero_id, existing)
+    }
+  })
+
+  const enemyStats = Array.from(enemyHeroMap.values()).map(item => ({
+    id: item.hero.id,
+    name: item.hero.name,
+    role: item.hero.role,
+    total: item.total,
+    enemyWinrate: Math.round((item.enemyWins / item.total) * 100)
+  }))
+
+  // MENGHAPUS SLICE: Kirim semua data agar bisa dipagination di Client
+  const enemyMostPicked = [...enemyStats].sort((a, b) => b.total - a.total)
+  const enemyKryptonite = [...enemyStats]
+    .sort((a, b) => b.enemyWinrate - a.enemyWinrate || b.total - a.total)
+
+  // --- HERO & PLAYER STATS (ALL TIME) ---
   const heroPickMap = new Map<string, { picks: number; wins: number; name: string; role: string }>()
   allMatchStats.forEach(stat => {
     if (stat.hero_id && stat.hero) {
@@ -98,7 +128,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     winrate: data.picks > 0 ? Math.round((data.wins / data.picks) * 100) : 0,
   }))
 
-  const playerStatsMap = new Map<number, { id: number; nickname: string; matches: number; wins: number; mvps: number; kills: number; deaths: number; assists: number }>()
+  const playerStatsMap = new Map<number, any>()
   allMatchStats.forEach(stat => {
     if (stat.player) {
       const existing = playerStatsMap.get(stat.player_id) || { id: stat.player_id, nickname: stat.player.nickname, matches: 0, wins: 0, mvps: 0, kills: 0, deaths: 0, assists: 0 }
@@ -110,7 +140,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     }
   })
 
-  const playerStats = Array.from(playerStatsMap.values()).map(p => ({
+  const playerStatsArr = Array.from(playerStatsMap.values()).map(p => ({
     ...p,
     winrate: p.matches > 0 ? Math.round((p.wins / p.matches) * 100) : 0,
     kda: p.deaths > 0 ? ((p.kills + p.assists) / p.deaths).toFixed(2) : (p.kills + p.assists).toFixed(2),
@@ -121,15 +151,18 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
       startDate={startDate}
       teamStats={{
         total_matches: totalMatches, wins, losses, winrate,
-        total_tournaments: totalTournaments, completed_tournaments: completedTournaments,
+        total_tournaments: totalTournaments, 
+        completed_tournaments: completedTournaments,
         total_prize: totalPrize, championships,
       }}
       draftStats={draftStats}
       banStats={banStats}
-      mostPickedHeroes={[...heroStats].sort((a, b) => b.picks - a.picks).slice(0, 5)}
-      bestWinrateHeroes={[...heroStats].filter(h => h.picks >= 3).sort((a, b) => b.winrate - a.winrate).slice(0, 5)}
-      topMvpPlayers={[...playerStats].sort((a, b) => b.mvps - a.mvps).slice(0, 5)}
-      topWinratePlayers={[...playerStats].filter(p => p.matches >= 3).sort((a, b) => b.winrate - a.winrate).slice(0, 5)}
+      enemyMostPicked={enemyMostPicked}
+      enemyKryptonite={enemyKryptonite}
+      mostPickedHeroes={[...heroStats].sort((a, b) => b.picks - a.picks)}
+      bestWinrateHeroes={[...heroStats].sort((a, b) => b.winrate - a.winrate || b.picks - a.picks)}
+      topMvpPlayers={[...playerStatsArr].sort((a, b) => b.mvps - a.mvps)}
+      topWinratePlayers={[...playerStatsArr].sort((a, b) => b.winrate - a.winrate || b.matches - a.matches)}
     />
   )
 }
