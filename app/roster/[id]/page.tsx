@@ -23,7 +23,8 @@ export default async function PlayerDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  // Fetch player match stats with hero and match info
+  // PERBAIKAN BUG: Ambil data tanpa limit di server, urutkan di memori nanti jika perlu
+  // tapi kueri ini akan mengambil data terbaru berdasarkan id (created_at)
   const { data: matchStats } = await supabase
     .from("match_player_stats")
     .select(`
@@ -35,9 +36,9 @@ export default async function PlayerDetailPage({ params }: PageProps) {
       )
     `)
     .eq("player_id", player.id)
-    .order("created_at", { ascending: false })
+    // Kita hapus order by created_at karena kita akan urutkan berdasarkan match_date di logic bawah
 
-  // FITUR BARU: Fetch turnamen yang diikuti player ini beserta detail turnamennya
+  // Fetch turnamen
   const { data: tournamentData } = await supabase
     .from("tournament_players")
     .select(`
@@ -46,23 +47,13 @@ export default async function PlayerDetailPage({ params }: PageProps) {
     `)
     .eq("player_id", player.id)
 
-  // Hitung total turnamen dan berapa kali jadi Champion
   const tournamentCount = tournamentData?.length || 0
   const championships = tournamentData?.filter((td: any) => 
-  td.tournament && (td.tournament as any).placement === "Champion"
-).length || 0
+    td.tournament && (td.tournament as any).placement === "Champion"
+  ).length || 0
 
   // Calculate hero pool stats
-  const heroPoolMap = new Map<string, {
-    hero_id: string
-    hero_name: string
-    hero_role: string
-    total_picks: number
-    wins: number
-    losses: number
-    mvp_count: number
-  }>()
-
+  const heroPoolMap = new Map<string, any>()
   matchStats?.forEach(stat => {
     if (stat.hero_id && stat.hero) {
       const existing = heroPoolMap.get(stat.hero_id)
@@ -96,40 +87,38 @@ export default async function PlayerDetailPage({ params }: PageProps) {
   const totalMatches = matchStats?.length || 0
   const wins = matchStats?.filter(m => m.is_win).length || 0
   const losses = totalMatches - wins
-  const totalMvp = matchStats?.filter(m => m.is_mvp).length || 0
-  const totalKills = matchStats?.reduce((sum, m) => sum + (m.kills || 0), 0) || 0
-  const totalDeaths = matchStats?.reduce((sum, m) => sum + (m.deaths || 0), 0) || 0
-  const totalAssists = matchStats?.reduce((sum, m) => sum + (m.assists || 0), 0) || 0
-
+  
   const playerStats = {
     total_matches: totalMatches,
     wins,
     losses,
     winrate: totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0,
-    total_mvp: totalMvp,
-    total_kills: totalKills,
-    total_deaths: totalDeaths,
-    total_assists: totalAssists,
+    total_mvp: matchStats?.filter(m => m.is_mvp).length || 0,
+    total_kills: matchStats?.reduce((sum, m) => sum + (m.kills || 0), 0) || 0,
+    total_deaths: matchStats?.reduce((sum, m) => sum + (m.deaths || 0), 0) || 0,
+    total_assists: matchStats?.reduce((sum, m) => sum + (m.assists || 0), 0) || 0,
     tournaments_joined: tournamentCount,
-    championships: championships, // Data baru ditambahkan
+    championships: championships,
   }
 
-  // Get recent matches
-  const recentMatches = matchStats?.slice(0, 10).map(stat => ({
+  // PERBAIKAN BUG: Urutkan semua match berdasarkan TANGGAL PERTANDINGAN (terbaru di atas)
+  const allMatches = matchStats ? [...matchStats].sort((a, b) => {
+    return new Date(b.match?.match_date).getTime() - new Date(a.match?.match_date).getTime()
+  }).map(stat => ({
     ...stat.match,
     hero: stat.hero,
     is_mvp: stat.is_mvp,
     kills: stat.kills,
     deaths: stat.deaths,
     assists: stat.assists,
-  })) || []
+  })) : []
 
   return (
     <PlayerDetailClient
       player={player}
-      playerStats={playerStats as any} // Di-cast ke any untuk menghindari error typescript sementara
+      playerStats={playerStats as any}
       heroPool={heroPool}
-      recentMatches={recentMatches}
+      recentMatches={allMatches} // Kirim semua data untuk dipagination di client
     />
   )
 }

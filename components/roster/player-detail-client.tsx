@@ -1,14 +1,15 @@
 "use client"
 
+import { useState } from "react"
 import { PageWrapper } from "@/components/page-wrapper"
 import { Player, HeroPoolStat } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Instagram, Trophy, Target, Crown, Star } from "lucide-react"
+import { ArrowLeft, Instagram, Trophy, Target, Crown, Star, ChevronLeft, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { format } from "date-fns"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 // Tipe kustom sementara agar mengenali properti championships
 interface LocalPlayerStats {
@@ -41,8 +42,21 @@ const roleColors: Record<string, string> = {
 
 export function PlayerDetailClient({ player, playerStats, heroPool, recentMatches }: PlayerDetailClientProps) {
   const signatureHero = heroPool[0]
-  // MENGHAPUS BATASAN SLICE, SEKARANG MENAMPILKAN SEMUA HERO
   const otherHeroes = heroPool.slice(1)
+
+  // --- LOGIKA PAGINATION & SORTING ---
+  const [currentPage, setCurrentPage] = useState(1)
+  const matchesPerPage = 10
+
+  // Pastikan data terurut berdasarkan tanggal terbaru (Fix Bug Update)
+  const sortedMatches = [...recentMatches].sort((a, b) => 
+    new Date(b.match_date).getTime() - new Date(a.match_date).getTime()
+  )
+
+  const totalPages = Math.ceil(sortedMatches.length / matchesPerPage)
+  const indexOfLastMatch = currentPage * matchesPerPage
+  const indexOfFirstMatch = indexOfLastMatch - matchesPerPage
+  const currentMatches = sortedMatches.slice(indexOfFirstMatch, indexOfLastMatch)
 
   return (
     <PageWrapper className="container mx-auto px-4 py-8">
@@ -165,14 +179,13 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                 <CardTitle className="text-lg font-semibold">Other Hero Pool</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* CSS ditambahkan untuk membungkus hero jika jumlahnya banyak (flex-wrap) */}
                 <div className="flex gap-4 flex-wrap pb-2">
                   {otherHeroes.map((hero, index) => (
                     <motion.div
                       key={hero.hero_id}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.05 }} // Animasi dipercepat
+                      transition={{ delay: index * 0.05 }}
                       className="flex flex-col items-center gap-2 shrink-0 mb-2"
                     >
                       <div className="w-16 h-16 relative rounded-full overflow-hidden bg-muted">
@@ -201,7 +214,6 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
               <CardTitle className="text-lg font-semibold">Player Statistics</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* GRID DIUBAH MENJADI 5 KOLOM */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div className="p-4 rounded-xl bg-muted/50 text-center">
                   <Trophy className="h-5 w-5 mx-auto mb-2 text-slate-600" />
@@ -209,7 +221,6 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
                   <p className="text-xs text-muted-foreground">Tournaments</p>
                 </div>
                 
-                {/* KARTU CHAMPION BARU DITAMBAHKAN */}
                 <div className="p-4 rounded-xl bg-gradient-to-b from-yellow-50 to-white border border-yellow-100 text-center">
                   <Crown className="h-5 w-5 mx-auto mb-2 text-yellow-500" />
                   <p className="text-2xl font-bold text-yellow-600">{playerStats.championships}</p>
@@ -250,54 +261,92 @@ export function PlayerDetailClient({ player, playerStats, heroPool, recentMatche
             </CardContent>
           </Card>
 
-          {/* Recent Match History (TETAP SAMA) */}
+          {/* Match History dengan Pagination */}
           <Card className="shadow-sm border-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold">Recent Match History</CardTitle>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-lg font-semibold">Match History</CardTitle>
+              {sortedMatches.length > 0 && (
+                <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                  Total {sortedMatches.length} Matches
+                </span>
+              )}
             </CardHeader>
             <CardContent>
-              {recentMatches.length === 0 ? (
+              {sortedMatches.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">No match history yet</p>
               ) : (
                 <div className="space-y-2">
-                  {recentMatches.map((match, index) => (
+                  <AnimatePresence mode="wait">
                     <motion.div
-                      key={index}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50"
+                      key={currentPage}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-10 rounded-full ${match.is_win ? "bg-green-500" : "bg-red-500"}`} />
-                        {match.hero && (
-                          <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-muted">
-                            <Image
-                              src={`/heroes/${match.hero.id}.png`}
-                              alt={match.hero.name}
-                              fill
-                              className="object-cover"
-                            />
+                      {currentMatches.map((match, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-transparent hover:border-muted-foreground/10 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-1.5 h-10 rounded-full ${match.is_win ? "bg-green-500" : "bg-red-500"}`} />
+                            {match.hero && (
+                              <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-muted">
+                                <Image
+                                  src={`/heroes/${match.hero.id}.png`}
+                                  alt={match.hero.name}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium text-sm">vs {match.opponent_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {match.kills}/{match.deaths}/{match.assists} KDA
+                                {match.is_mvp && <span className="ml-2 text-yellow-600 font-bold">MVP</span>}
+                              </p>
+                            </div>
                           </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-sm">vs {match.opponent_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {match.kills}/{match.deaths}/{match.assists} KDA
-                            {match.is_mvp && <span className="ml-2 text-yellow-600">MVP</span>}
-                          </p>
+                          <div className="text-right">
+                            <p className={`font-semibold text-sm ${match.is_win ? "text-green-600" : "text-red-600"}`}>
+                              {match.is_win ? "WIN" : "LOSS"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(match.match_date), "MMM d, HH:mm")}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-semibold text-sm ${match.is_win ? "text-green-600" : "text-red-600"}`}>
-                          {match.is_win ? "WIN" : "LOSS"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(match.match_date), "MMM d")}
-                        </p>
-                      </div>
+                      ))}
                     </motion.div>
-                  ))}
+                  </AnimatePresence>
+
+                  {/* Tombol Navigasi Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-lg hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      
+                      <span className="text-sm font-medium">
+                        Page {currentPage} of {totalPages}
+                      </span>
+
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-lg hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
