@@ -13,6 +13,7 @@ import { motion } from "framer-motion"
 interface MatchWithDetails extends Match {
   player_stats: any[]
   bans: any[]
+  opponent_picks: any[] // TAMBAHKAN INI
 }
 
 interface HistoryClientProps {
@@ -62,7 +63,6 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                           {match.tournament?.name || "Friendly Match"}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {/* PERBAIKAN: Menggunakan HH:mm untuk format 24 jam */}
                           {format(new Date(match.match_date), "MMM d, yyyy HH:mm")}
                         </p>
                       </div>
@@ -77,10 +77,10 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                     </div>
                   </div>
 
-                  {/* Player Stats */}
+                  {/* Player Performance (Tim Kita) */}
                   {match.player_stats.length > 0 && (
                     <div className="mt-6 pt-6 border-t border-border">
-                      <p className="text-sm font-medium mb-3">Player Performance</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Our Team Performance</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         {match.player_stats.map((stat: any) => (
                           <div
@@ -114,16 +114,41 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                     </div>
                   )}
 
-                  {/* Bans */}
-                  {match.bans.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-sm font-medium mb-2">Bans</p>
-                      <div className="flex gap-4">
+                  {/* Hero Picks & Bans Area */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-border/60">
+                    
+                    {/* Enemy Hero Picks (FITUR BARU) */}
+                    <div>
+                      <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-2">Enemy Hero Picks</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {match.opponent_picks && match.opponent_picks.length > 0 ? (
+                          match.opponent_picks.map((pick: any) => (
+                            <div key={pick.id} className="w-9 h-9 relative rounded-lg overflow-hidden bg-muted border border-red-100" title={pick.hero?.name}>
+                              {pick.hero && (
+                                <Image
+                                  src={`/heroes/${pick.hero.id}.png`}
+                                  alt={pick.hero.name}
+                                  fill
+                                  className="object-cover"
+                                />
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">No enemy picks recorded</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bans */}
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Bans</p>
+                      <div className="flex gap-6">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Our Bans</p>
+                          <p className="text-[9px] font-medium text-muted-foreground mb-1">Our Bans</p>
                           <div className="flex gap-1">
                             {match.bans.filter((b: any) => b.is_our_ban).map((ban: any) => (
-                              <div key={ban.id} className="w-8 h-8 relative rounded-lg overflow-hidden bg-muted">
+                              <div key={ban.id} className="w-8 h-8 relative rounded-lg overflow-hidden bg-muted border border-border/40">
                                 {ban.hero && (
                                   <Image
                                     src={`/heroes/${ban.hero.id}.png`}
@@ -137,10 +162,10 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                           </div>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Enemy Bans</p>
+                          <p className="text-[9px] font-medium text-muted-foreground mb-1">Enemy Bans</p>
                           <div className="flex gap-1">
                             {match.bans.filter((b: any) => !b.is_our_ban).map((ban: any) => (
-                              <div key={ban.id} className="w-8 h-8 relative rounded-lg overflow-hidden bg-muted">
+                              <div key={ban.id} className="w-8 h-8 relative rounded-lg overflow-hidden bg-muted border border-border/40">
                                 {ban.hero && (
                                   <Image
                                     src={`/heroes/${ban.hero.id}.png`}
@@ -155,18 +180,18 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Screenshot Link */}
                   {match.screenshot_url && (
-                    <div className="mt-4">
+                    <div className="mt-6 pt-4 border-t border-dashed">
                       <a
                         href={match.screenshot_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
-                        View Screenshot <ExternalLink className="h-3 w-3" />
+                        <ExternalLink className="h-3 w-3" /> View Match Screenshot
                       </a>
                     </div>
                   )}
@@ -177,7 +202,7 @@ export function HistoryClient({ matches, currentPage, totalPages }: HistoryClien
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Pagination (TETAP SAMA) */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 mt-8">
           <Link
