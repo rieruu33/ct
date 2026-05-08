@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { 
   Home, 
@@ -17,7 +17,7 @@ import {
   Sun,
   Moon
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
@@ -35,16 +35,46 @@ const navItems = [
 
 export function Navigation() {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+
+  // STATE UNTUK EASTER EGG LOGO
+  const [clickCount, setClickCount] = useState(0)
+  const lastClickTime = useRef(0)
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault() // Mencegah reload berulang saat di-spam klik
+    const now = Date.now()
+    
+    // Jika jeda antar klik lebih dari 2 detik (2000ms), hitungan di-reset dari awal
+    if (now - lastClickTime.current > 2000) {
+      setClickCount(1)
+      if (pathname !== "/") router.push("/") // Tetap berfungsi normal sebagai tombol kembali ke Home
+    } else {
+      const newCount = clickCount + 1
+      setClickCount(newCount)
+      
+      // Trigger easter egg jika mencapai klik ke-10
+      if (newCount === 10) {
+        router.push("/developer")
+        setClickCount(0) // Reset hitungan
+      }
+    }
+    lastClickTime.current = now
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center px-4">
         
-        {/* Logo Section - Di kiri */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background font-bold text-sm">
+        {/* Logo Section - Di kiri (Dengan trigger Easter Egg) */}
+        <Link 
+          href="/" 
+          onClick={handleLogoClick}
+          className="flex items-center gap-2 shrink-0 select-none group"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background font-bold text-sm transition-transform active:scale-90 group-hover:scale-105">
             CT
           </div>
           <span className="font-semibold text-lg hidden lg:inline">Cukup Tau</span>
